@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Feel and Be Felt</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{--bg:#040406;--light:#F2E8D5;--gift:#C8107A;--line:#2a2430}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+  #world{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  #strip{position:fixed;left:0;right:0;bottom:0;width:100%;height:max(22px,4vh);image-rendering:pixelated;background:var(--bg);border-top:1px solid var(--line)}
+  #eye{position:fixed;right:16px;top:50%;transform:translateY(-50%);height:min(44vh,300px);width:28px;margin:0;writing-mode:vertical-lr;direction:rtl;accent-color:var(--light);opacity:.5}
+  #eye:hover,#eye:focus-visible{opacity:.9}
+  #listen{position:fixed;right:12px;top:12px;width:44px;height:44px;padding:0;border-radius:50%;border:1px solid var(--line);background:transparent;cursor:pointer;opacity:.6}
+  #listen svg{display:block;margin:auto}
+  #listen[data-on="1"]{opacity:.25}
+  #listen:focus-visible,#eye:focus-visible{outline:2px solid var(--light);outline-offset:3px}
+  #fail{position:fixed;left:16px;right:16px;top:40%;margin:0;color:var(--light);font:16px/1.5 system-ui,sans-serif;text-align:center}
+  #credit{position:fixed;left:16px;top:14px;max-width:min(52em,calc(100% - 92px));margin:0;color:var(--light);opacity:.6;font:12px/1.45 system-ui,sans-serif;pointer-events:none}
+  #credit h1{margin:0 0 2px;font-size:15px;font-weight:600;letter-spacing:.04em}
+  #credit p{margin:0}
+  [hidden]{display:none}
+</style>
+</head>
+<body data-ready="loading">
+  <canvas id="world" aria-label="A small lit city on a plane. A worn block hangs corner-down above it and is lowered through it."></canvas>
+  <canvas id="strip" aria-label="What a citizen of the plane sees: one line of light"></canvas>
+  <header id="credit">
+    <h1>Feel and Be Felt</h1>
+    <p>A Tripo-made model via Tripo's API, lowered into the world of Edwin A. Abbott's 1884 book <cite>Flatland</cite>.</p>
+  </header>
+  <input id="eye" type="range" min="0" max="1" step="0.001" value="0.7" aria-label="Eye height, from above down to the table's edge">
+  <button id="listen" type="button" aria-label="Tap to hear the street">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.2" fill="#F2E8D5"/><circle cx="10" cy="10" r="5.5" fill="none" stroke="#F2E8D5" stroke-width="1.2" opacity=".7"/><circle cx="10" cy="10" r="8.6" fill="none" stroke="#F2E8D5" stroke-width="1" opacity=".4"/></svg>
+  </button>
+  <p id="fail" role="alert" hidden></p>
+  <!-- x1's single pinned three.js address (three@0.160.0 on jsDelivr), used unchanged -->
+  <script src="./config.js"></script>
+  <script>
+    (() => {
+      const say = text => { const f = document.getElementById('fail'); f.hidden = false; f.textContent = text; document.body.dataset.ready = 'error'; };
+      if (!window.FLATLAND_CONFIG) { say('The page could not find its engine. Open this folder through a local static server, not as a file.'); return; }
+      const base = window.FLATLAND_CONFIG.threeBase, map = document.createElement('script');
+      map.type = 'importmap';
+      map.textContent = JSON.stringify({imports: {three: base + 'build/three.module.js', 'three/addons/': base + 'examples/jsm/'}});
+      document.head.append(map);
+      const main = document.createElement('script');
+      main.type = 'module'; main.src = './main.js';
+      main.onerror = () => say('The page could not load its code. Open this folder through a local static server; the first load needs three.js 0.160.0 from jsDelivr.');
+      document.head.append(main);
+    })();
+  </script>
+</body>
+</html>
