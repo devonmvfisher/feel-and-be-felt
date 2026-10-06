@@ -1,4 +1,5 @@
-// floor-0 (PLAN s5 floor, H7): the city, the slice, the touch and the voices. Nothing from the lift or ceiling.
+// floor-0-lift: floor-0 (PLAN s5 floor, H7) plus one switch for the lift (ORDERS 4b HB1): ?lift=duet,quiet,colour or
+// WORLD.lift below. site-final: ON by default (line 14); with ?lift=off this page never loads floor0-adapter.js and behaves as floor-0 did.
 // Joins x1 FLATLAND-ENGINE v1 (slice law, polygons, Flatlander strip) and x2 VOICE-OF-SHAPES v1 (voices), both
 // imported unchanged, with Devon's Tripo block (tripo-in/plain-cube-low.glb, Gate 1 + 1b PASS) as the gift.
 // Pure parts are exported so Node can run them (slicecheck.mjs); the page boots only in a browser.
@@ -9,7 +10,8 @@ import {createVoices,MAX_VOICES} from './voices.js';
 
 // City, sizes and colours from world.json (draft, Oct 5 23:04 CT); poseShelf from improve/hexreach-plain-cube-low-output.txt.
 export const WORLD={seed:1884,count:60,size:1,radius:20,plaza:7.5,giftSize:8,light:'#F2E8D5',eye:'#FFFFFF',gift:'#C8107A',background:'#040406',
-  poseShelf:[0.337307,0,-0.323372,0.884112],cycle:{down:10,hold:4,up:10,street:6},reach:3.5,bendReach:8,observer:[0,24],fog:0.045};
+  poseShelf:[0.337307,0,-0.323372,0.884112],cycle:{down:10,hold:4,up:10,street:6},reach:3.5,bendReach:8,observer:[0,24],fog:0.045,
+  lift:['duet','quiet','colour']};   // THE LIFT SWITCH for the frozen build: [] = off; ['duet','quiet','colour'] = on. ?lift= in the address overrides it.
 // The order's ladder of sides (book s.3): many Triangles, fewer of each higher rank, three near-Circles (40 sides). 60 in all.
 const LADDER=[[3,16],[4,14],[5,10],[6,8],[7,3],[8,2],[9,1],[10,1],[11,1],[12,1],[40,3]];
 
@@ -71,7 +73,7 @@ async function boot(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.setClearColor(WORLD.background);
   const gl=renderer.getContext(),info=gl.getExtension('WEBGL_debug_renderer_info');api.gpu=String(info?gl.getParameter(info.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER));
   const scene=new THREE.Scene();scene.background=new THREE.Color(WORLD.background);
-  scene.add(new THREE.HemisphereLight('#fff4e6','#1a1020',1.6));const key=new THREE.DirectionalLight('#fff0dd',2.2);key.position.set(-8,20,10);scene.add(key);
+  const hemi=new THREE.HemisphereLight('#fff4e6','#1a1020',1.6);scene.add(hemi);const key=new THREE.DirectionalLight('#fff0dd',2.2);key.position.set(-8,20,10);scene.add(key);
   const camera=new THREE.PerspectiveCamera(42,1,0.05,300);
   const plane=new THREE.Mesh(new THREE.CircleGeometry(WORLD.radius+3,96),new THREE.MeshBasicMaterial({color:'#0b0a10'}));plane.rotation.x=-Math.PI/2;plane.position.y=-0.03;scene.add(plane);
 
@@ -114,10 +116,12 @@ async function boot(){
   document.getElementById('listen').addEventListener('click',unlock);addEventListener('pointerdown',unlock);addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')unlock(e);});
   document.addEventListener('visibilitychange',()=>{if(!engine.status.unlocked)return;if(document.hidden)engine.silence();else for(const s of voices)s.v.start();});
   function voiceStreet(sliceSides,area,now){
-    const obs=WORLD.observer,order=people.map((c,i)=>[Number.isFinite(c.d)?c.d:100+Math.hypot(c.pos[0]-obs[0],c.pos[1]-obs[1]),i]).sort((a,b)=>a[0]-b[0]).slice(0,MAX_VOICES).map(r=>r[1]);
+    const obs=WORLD.observer;let order=people.map((c,i)=>[Number.isFinite(c.d)?c.d:100+Math.hypot(c.pos[0]-obs[0],c.pos[1]-obs[1]),i]).sort((a,b)=>a[0]-b[0]).slice(0,MAX_VOICES).map(r=>r[1]);
+    if(lift)order=lift.voiceOrder(order);
     const held=new Set(voices.map(s=>s.owner)),free=voices.filter(s=>!order.includes(s.owner));for(const i of order)if(!held.has(i))free.shift().owner=i;
     for(const s of voices){const c=people[s.owner],w=sliceSides?clamp(1-c.d/WORLD.bendReach,0,1):0,beat=now<c.beatUntil;
-      s.v.update({sides:beat?c.beatSides:c.sides+(sliceSides-c.sides)*w*0.7,rank:beat?c.beatRank:rankOf(c.sides),size:1,x:c.pos[0]/4,y:c.pos[1]/4,moving:c.moving});}
+      const sides=beat?c.beatSides:c.sides+(sliceSides-c.sides)*w*0.7;
+      s.v.update({sides:lift?lift.voiceSides(s.owner,sides):sides,rank:beat?c.beatRank:rankOf(c.sides),size:1,x:c.pos[0]/4,y:c.pos[1]/4,moving:c.moving});}
     const next=Math.round((0.08-0.04*clamp(area/50,0,1))*200)/200;if(next!==ceiling){ceiling=next;engine.setCeiling(next);}   // the gift is a hole of silence: the street ducks
   }
   engine.setListener({x:WORLD.observer[0]/4,y:WORLD.observer[1]/4});
@@ -154,16 +158,21 @@ async function boot(){
   addEventListener('resize',resize);resize();
 
   let section=sliceTriangles(new Float64Array(0),0),corners=[],lastH=NaN,last=performance.now();const t0=last;
+  // The lift switch: the address wins over WORLD.lift. With no lift named (?lift=off), floor0-adapter.js is never loaded.
+  let lift=null;{const want=q.has('lift')?q.get('lift'):WORLD.lift.join(',');
+    if(want&&want!=='off'){const L=await import('./floor0-adapter.js'),list=L.parseLift(want);
+      if(list.length){lift=L.createLift(list,{THREE,scene,WORLD,R,people,lineMat,eyeMat,hemi,key,t0,api});api.lift=lift.api;}}}
   api.setTime=t=>{frozen=Number.isFinite(t)?t:null;};api.setEye=v=>{eye.value=String(clamp(v,0,1));};
   function frame(now){
     try{
-      const dt=Math.min(0.05,Math.max(0,(now-last)/1000));last=now;const t=frozen??(now-t0)/1000,h=giftHeight(t,half);
+      const dt=Math.min(0.05,Math.max(0,(now-last)/1000));last=now;const t=frozen??(now-t0)/1000,h=lift?lift.giftHeight(giftHeight(t,half),half):giftHeight(t,half);
       gift.position.y=h;const op=0.35+0.65*clamp((h-half)/1.5,0,1);for(const m of giftMats){m.opacity=op;m.depthWrite=op>0.99;}
       if(h!==lastH){lastH=h;section=sliceTriangles(soup,-h);corners=section.loops.flatMap(l=>feltCorners(l));drawSlice(section,corners);}
       const segs=[...section.loops.flatMap(loopSegments),...section.openSegments];let cx=0,cz=0;for(const s of segs){cx+=s[0][0];cz+=s[0][1];}const center=segs.length?[cx/segs.length,cz/segs.length]:[0,0];
       for(const c of people)feel(c,section,segs,corners,center,dt,now/1000);
+      if(lift)lift.afterFeel({corners,center,giftT:t});
       for(const f of flares){if(f.life>0){f.life=Math.max(0,f.life-dt*2);f.scale.setScalar(1+3*(1-f.life));f.material.opacity=f.life;}}
-      const sliceSides=section.loops.length?(corners.length>=13||corners.length===0?32:corners.length):0;voiceStreet(sliceSides,section.stats.area,now/1000);
+      const sliceSides=section.loops.length?(corners.length>=13||corners.length===0?32:corners.length):0;voiceStreet(sliceSides,section.stats.area,now/1000);if(lift)lift.logVoices(t,voices,ceiling);
       placeCamera();renderer.render(scene,camera);drawStrip(section);
       api.frames++;api.t=t;api.slice={height:h,half,corners:corners.length,angles:corners.map(k=>Math.round(k.angle)),sideCount:section.stats.sideCount,contours:section.stats.contourCount,open:section.openSegments.length,area:section.stats.area,touching:people.filter(c=>c.touching).length};
       if(api.frames===1){api.ready=true;document.body.dataset.ready='true';}
